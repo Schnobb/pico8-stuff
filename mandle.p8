@@ -1,0 +1,93 @@
+pico-8 cartridge // http://www.pico-8.com
+version 16
+__lua__
+--main
+
+local speed=1.0
+local max_iter=30
+local escape=4.0
+local power=2
+
+local pos_x=0
+local pos_y=0
+local r=1.25
+
+local palette={0,1,2,8,9,10,7}
+
+local res_x=127
+local res_y=127
+
+local phi=1.618033988
+local pi=3.141592654
+local tau=2*pi
+
+local frame=0
+
+function _draw()
+	cls()
+ local a=(frame*speed) % tau
+ local esc_sq=escape*escape
+ 
+ for x=0,res_x do
+  for y=0,res_y do
+   uv={}
+   z={}
+   c={}
+   
+   uv.x=x/res_x
+   uv.y=y/res_y
+ 
+   z.x=0
+   z.y=0
+  
+   c.x=(uv.x * 3.5 - 2.5 + pos_x) * r
+   c.y=(uv.y * 2.0 - 1.0 + pos_y) * r
+   local iter=0
+   while iter<max_iter and z.x*z.x+z.y*z.y<esc_sq do
+    z = cadd(cpow(z,power),c)
+    iter+=1
+   end
+   
+   if iter>=max_iter then
+    pset(x,y,0)
+   else
+    local v=flr((iter/max_iter) * #palette)+1
+    pset(x,y,palette[v%#palette])
+   end
+  end
+ end
+end
+-->8
+-- complex functions
+
+function cadd(c1, c2)
+ local t={}
+ t.x=c1.x + c2.x
+ t.y=c1.y + c2.y
+	return t
+end
+
+function cmul(c1, c2)
+ local t={}
+ t.x=c1.x*c2.x - c1.y*c2.y
+ t.y=c1.x*c2.y + c1.y*c2.x
+ return t
+end
+
+function cpow(c1, pow)
+	local t={}
+	t.x=c1.x
+	t.y=c1.y
+	for i=1,pow-1 do
+		t = cmul(t, c1)
+	end
+	return t
+end
+__gfx__
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000511100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00700700623c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0007700078bd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0007700009a600000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+007007000a7700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000070000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
