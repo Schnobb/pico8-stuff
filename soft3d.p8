@@ -38,7 +38,7 @@ function _init()
    col={8,11,12},
    enabled=false
   },
-  shading={0,1,2,8,9,10,6},
+  shading={0,1,2,8,9,10,7},
   drawnorm=true,
   normcol=12,
   
