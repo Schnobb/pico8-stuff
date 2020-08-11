@@ -1,3 +1,8 @@
 demos/
+exports/
+downloads/
 *.png
 *.wav
+*.zip
+*.exe
+*.dll

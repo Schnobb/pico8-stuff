@@ -1,0 +1,79 @@
+pico-8 cartridge // http://www.pico-8.com
+version 29
+__lua__
+function ring(e,r,o)
+ local pts={}
+ for i=1,e do
+  local x=r*cos((i+o)/e)
+  local y=r*sin((i+o)/e)
+  add(pts,{x=x,y=y})
+ end
+ 
+ return pts
+end
+
+function str(obj)
+ if type(obj)!="table" then
+  return tostr(obj)
+ end
+ 
+ local msg="{"
+ 
+ for k,v in pairs(obj) do
+  msg=msg..str(v)..","
+ end
+ 
+ return sub(msg,1,-2).."}"
+end
+
+function _init()
+ edges=3
+end
+
+function _update60()
+ if btnp(⬆️) then
+  edges+=1
+ elseif btnp(⬇️) then
+  edges-=1
+ end
+end
+
+function ppset(p,r,c)
+ pset(p.x+r+8,p.y+r+8,c)
+end
+
+function _draw()
+ cls(1)
+ local r=56
+ local pts=ring(edges,r,0)
+ 
+ for p in all(pts) do
+  ppset(p,r,8)
+ end
+ 
+ pts=ring(edges,r,1)
+ for p in all(pts) do
+  ppset(p,r,9)
+ end
+ 
+ pts=ring(edges,r*0.8,0)
+ for p in all(pts) do
+  ppset(p,r,7)
+ end
+ 
+ pts=ring(edges,r*0.8,1)
+ for p in all(pts) do
+  ppset(p,r,11)
+ end
+ 
+-- print(str({{3,4,5},1,2,3}))
+-- print(str(pts))
+ print(edges,7)
+end
+__gfx__
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00700700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00077000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00077000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00700700000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

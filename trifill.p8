@@ -1,11 +1,12 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 29
 __lua__
 -- main
 
 function _init()
  state={
   debug={},
+  show_area=false,
   
   triangles=genrndtri(256),
   triindex=1
@@ -22,6 +23,11 @@ function _update60()
  elseif btnp(btns.right) then
   -- stupid tables that start at one...
   state.triindex=(((state.triindex-1)+1)%#state.triangles)+1
+ end
+ 
+ if state.show_area then
+  local tri=state.triangles[state.triindex]
+  db("area: "..area(tri.p1,tri.p2,tri.p3))
  end
 end
 
@@ -196,6 +202,10 @@ function printb(str,x,y,col,bordercol,usecur)
  else
   print(str,x,y,col)
  end
+end
+
+function area(p1,p2,p3)
+ return ((p2.x-p1.x)*(p3.y-p1.y) - (p3.x-p1.x)*(p2.y-p1.y))/2
 end
 -->8
 -- debug
