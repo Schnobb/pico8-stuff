@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 16
+version 29
 __lua__
 local colors={0,1,2,8,9,10,7}
 local ri=0
@@ -8,7 +8,7 @@ local buffer={}
 local wind=0.6
 
 function _init()
- lowres = true
+ lowres = false
  buffer_size = 127
  
  if lowres then
