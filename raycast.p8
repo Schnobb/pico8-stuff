@@ -147,19 +147,39 @@ function render_3d()
  local drawdist=gs.drawdist
  local blib=0
  
+ -- raycast direction and screen division method is heavily inspired from
+ -- https://www.gamedev.net/forums/topic/635066-2d-ray-casting-problems-dont-align-correctly/
+ 
  -- k is the opposite side of a right triangle made by the
  -- length of the player facing vector (1 since it's normalized)
  -- and the fov/2.
+ --
+ -- k .-k
+ -- __.__
+ -- \ | /
+ --  \|/
+ --   .
  local k=-tanr(deg2rad(pl.fov/2))
+ 
+ -- look_vector (lv) is player rotation vector modified by the dist_to_screen.
  local lv=vec2(pl.face.x*pl.dist_to_screen,pl.face.y*pl.dist_to_screen)
- -- left_lv is the perpendicular vector to our look vector. for a vector
+ 
+ -- screenv is the screen vector and starts perpendicular to our look vector. for a vector
  -- <a,b> a 90deg ccw rotation can be achieved with <b,-a>
- local left_lv=vec2(lv.y,-lv.x)
- local far_left_lv=vec2(lv.x+k*left_lv.x,lv.y+k*left_lv.y)
- local inc=vec2(-2*k*left_lv.x/steps,-2*k*left_lv.y/steps)
+ local screenv=vec2(lv.y,-lv.x)
+ 
+ -- divide screenv equally between 0 and gs.rendersize.x.
+ local inc=vec2(-2*k*screenv.x/steps,-2*k*screenv.y/steps)
+ 
+ -- move screenv forward by pl.dist_to_screen and stretch it so it fits between
+ -- -fov/2 and fov/2
+ local screenv=vec2(lv.x+k*screenv.x,lv.y+k*screenv.y)
 
  for x=0,steps do
-  local f=vec2(pl.face.x+far_left_lv.x+x*inc.x,pl.face.y+far_left_lv.y+x*inc.y)
+  -- find point #x on screenv, this will be the ray's direction vector.
+  -- This won't be normalized because it will actually provide perspective correction
+  -- due to the fact the vector's length will increase as we get farther from the middle point.
+  local f=vec2(pl.face.x+screenv.x+x*inc.x,pl.face.y+screenv.y+x*inc.y)
   local cast=raycast(p1x,p1y,f.x,f.y)
   local d=cast.d
   local col=cast.col
@@ -181,13 +201,6 @@ function render_3d()
 end
 -->8
 -- util
---random maths stuff
-function round(x)
- local y=x\1 -- int part
- if x-y>=0.5 then y+=1 end
- return y
-end
-
 -- linear algebra stuff
 function vec2(x,y)
  return {
@@ -248,7 +261,7 @@ end
 -- return negate * 3.14159265358979 + ret;
 --end
 
-function acos(x)
+function acosr(x)
  return atan2(x,-sqrt(1-x*x))*2*pi
 end
 
@@ -257,7 +270,7 @@ function dot(x1,y1,x2,y2)
 end
 
 function r_between_vec(x1,y1,x2,y2)
- return acos(dot(x1,y1,x2,y2)/(len(x1,y1)*len(x2,y2)))
+ return acosr(dot(x1,y1,x2,y2)/(len(x1,y1)*len(x2,y2)))
 end
 
 function d_between_vec(x1,y1,x2,y2)
@@ -299,6 +312,8 @@ function collides(x,y,flag)
  end
 end
 
+-- adapted from everyone's favorite raycast tutorial
+-- https://lodev.org/cgtutor/raycasting.html
 function raycast(px,py,fx,fy)
  local nx,ny=px/8,py/8
  local mx,my=flr(nx),flr(ny)
@@ -320,6 +335,9 @@ function raycast(px,py,fx,fy)
   ty=(my+1-ny)*dy
  end
  
+ -- slows cast down a bit too much, just make sure there's no holes
+ -- in the walls and it won't crash.
+ --while is_inside(mx*8,my*8,gs.bounds.p1,gs.bounds.p2) do
  while true do
   if tx<ty then
    tx+=dx
@@ -335,17 +353,12 @@ function raycast(px,py,fx,fy)
   if tile>0 then break end
  end
  
- -- Perspective correction
- if gs.persp_correction then
-  if side then
-   d=(mx-nx+(1-sgn(fx))/2)/fx
-  else
-   d=(my-ny+(1-sgn(fy))/2)/fy
-  end
+ if side then
+  d=(mx-nx+(1-sgn(fx))/2)/fx
  else
-  d=len(mx-nx,my-ny)
+  d=(my-ny+(1-sgn(fy))/2)/fy
  end
- 
+  
  nx=px+fx*d*8
  ny=py+fy*d*8
  
