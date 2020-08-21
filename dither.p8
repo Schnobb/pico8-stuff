@@ -2,11 +2,42 @@ pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
 function _init()
- init_colors()
+ interp_list={
+  {f=lerp,name="lerp"},
+  {f=smoothstep,name="smoothstep"},
+  {f=smootherstep,name="smootherstep"}
+ }
+ interp_idx=0
+ interp=interp_list[interp_idx+1].f
+ 
+ color_res=32
+ init_colors(color_res)
 end
 
-function _update60()
+function _update()
+ local regen=false
+	if btnp(⬅️) then
+	 interp_idx=(interp_idx-1)%#interp_list
+	 regen=true
+	elseif btnp(➡️) then
+	 interp_idx=(interp_idx+1)%#interp_list
+	 regen=true
+	end
 	
+	if btn(⬆️) then
+	 color_res=mid(8,color_res+1,256)
+	 regen=true
+	elseif btn(⬇️) then
+	 color_res=mid(8,color_res-1,256)
+	 regen=true
+	end
+	
+	interp=interp_list[interp_idx+1].f
+	interp(0,1,0.5)
+	
+	if regen then
+	 init_colors(color_res)
+	end
 end
 
 function _draw()
@@ -19,6 +50,11 @@ function _draw()
 	  rectfill(x,y*h,x+1,y*h+h,hcolor(y,x/128))
 	 end
 	end
+	
+	color(7)
+	local msg=interp_list[interp_idx+1].name
+	msg=msg.." - ".."res: "..color_res
+	print(msg)
 end
 -->8
 --colors
@@ -27,7 +63,7 @@ function init_colors(res)
  -- enable color fill patterns
  poke(0x5f34,1)
  
- -- res: resolution of brightness gradiant, default 128
+ -- res: resolution of brightness gradient, default 128
  res=res or 128
  
  local bright={
@@ -77,8 +113,7 @@ function init_colors(res)
 		colors[i]={}
 			
 		for j=0,res do
-		 local b=(j%hstep)/hstep
-		 b=flr(b*#bright)
+		 local b=interp(0,#bright,(j%hstep)/hstep)
 		 if j>0 and j%hstep==0 then 
 		  hi=hi+1
 		 end
@@ -89,7 +124,7 @@ function init_colors(res)
 		 local cright=h[min(hi+1,#h)]
 		 
 		 colors[i][j]=bor(cleft,shl(cright,4))
-		 colors[i][j]+=bright[b+1]
+		 colors[i][j]+=bright[flr(b)+1]
 		end
 	end
 end
@@ -98,8 +133,35 @@ function hcolor(base,light)
 	local l=light*colors.res
 	return colors[base][flr(l)]
 end
+-->8
+-- utils
 
-function init_colors_beta(res)
+function lerp(x1,x2,w)
+ return (1-w)*x1+w*x2
+end
+
+function smoothstep(x1,x2,w)
+	w=mid(w,0,1)
+	w=(w*w*(3-2*w))
+	return (x2-x1)*w+x1
+end
+
+function smootherstep(x1,x2,w)
+	w=mid(w,0,1)
+	w=w*w*w*(w*(w*6-15)+10)
+	return (x2-x1)*w+x1
+end
+
+function round(x)
+ if x-flr(x)>=0.5 then
+  return ceil(x)
+ else
+  return flr(x)
+ end
+end
+-->8
+-- wip
+function init_colors_wip(res)
  -- enable color fill patterns
  poke(0x5f34,1)
  
@@ -147,32 +209,6 @@ function init_colors_beta(res)
 		 
 		end
 	end
-end
--->8
--- utils
-
-function lerp(x1,x2,w)
- return (1-w)*x1+w*x2
-end
-
-function smoothstep(x1,x2,w)
-	w=mid(w,0,1)
-	w=(w*w*(3-2*w))
-	return (x2-x1)*w+x1
-end
-
-function smootherstep(x1,x2,w)
-	w=mid(w,0,1)
-	w=w*w*w*(w*(w*6-15)+10)
-	return (x2-x1)*w+x1
-end
-
-function round(x)
- if x-flr(x)>=0.5 then
-  return ceil(x)
- else
-  return flr(x)
- end
 end
 __gfx__
 00000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

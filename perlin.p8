@@ -39,7 +39,7 @@ function _init()
  
  local seed=nil
  init_grad(seed)
- init_colors()
+ init_colors(64)
 end
 
 function _update60()
@@ -329,8 +329,8 @@ function init_colors(res)
 		colors[i]={}
 			
 		for j=0,res do
-		 local b=(j%hstep)/hstep
-		 b=flr(b*#bright)
+		 local b=smoothstep(0,#bright,(j%hstep)/hstep)
+		 b=flr(b)
 		 if j>0 and j%hstep==0 then 
 		  hi=hi+1
 		 end

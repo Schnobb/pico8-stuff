@@ -4,6 +4,7 @@ __lua__
 function _init()
  pi=3.14159
  gs={
+  dither=true,
   debug=true,
   db={},
   db_px={},
@@ -16,7 +17,7 @@ function _init()
   
   rendersize=vec2(128,128),
   mode="3d",
-  drawdist=100,
+  drawdist=16,
   persp_correction=true
  }
  
@@ -58,6 +59,8 @@ function _init()
  
  cols[0]={vert=0,horz=0}
  loadmap()
+ 
+ init_colors()
 end
 
 function _update60()
@@ -133,6 +136,7 @@ end
 
 function render_3d()
  cls(gs.back)
+ fillp(0)
  rectfill(0,0,128,63,cols.ceiling) 
  rectfill(0,64,128,128,cols.floor)
   
@@ -191,7 +195,11 @@ function render_3d()
 	  y2=mid(0,lh\2+h\2,h)
 	  
 	  local c=cast.side and col.horz or col.vert
-    local ass=cast.side and 8 or 8
+   --local ass=cast.side and 8 or 8
+   
+   if gs.dither then
+    c=hcolor(c,1-d/drawdist)
+   end
 	  line(x,y1,x,y2,c)
     --line(x,y1,x,y2,ass+blib)
   end
@@ -371,6 +379,17 @@ function raycast(px,py,fx,fy)
  }
 end
 
+function smoothstep(x1,x2,w)
+	w=mid(w,0,1)
+	w=(w*w*(3-2*w))
+	return (x2-x1)*w+x1
+end
+
+function smootherstep(x1,x2,w)
+	w=mid(w,0,1)
+	w=w*w*w*(w*(w*6-15)+10)
+	return (x2-x1)*w+x1
+end
 -->8
 -- debug stuff
 function print_db(col)
@@ -480,6 +499,83 @@ function loadmap()
    maptest[y][x]=mget(x,y)
   end
  end
+end
+-->8
+--colors
+
+function init_colors(res)
+ -- enable color fill patterns
+ poke(0x5f34,1)
+ 
+ -- res: resolution of brightness gradient, default 128
+ res=res or 128
+ 
+ local bright={
+  0b0.1000000000000000,
+  0b0.1000000000100000,
+  0b0.1000000010100000,
+  0b0.1010000010100000,
+  0b0.1010010010100000,
+  0b0.1010010010100001,
+  0b0.1010010010100101,
+  0b0.1010010110100101,
+  0b0.1110010110100101,
+  0b0.1110010110110101,
+  0b0.1110010111110101,
+  0b0.1111010111110101,
+  0b0.1111010111110111,
+  0b0.1111110111110111,
+  0b0.1111110111111111,
+  0b0.1111111111111111
+ }
+ 
+ local hues={
+  {0},
+  {0,1,1,12},
+  {0,1,2},
+  {0,1,3},
+  {0,1,2,4},
+  {0,1,5},
+  {0,1,5,6},
+  {0,1,5,6,7},
+  {0,1,2,8},
+  {0,1,2,4,9,9,10},
+  {0,1,2,4,9,10,7},
+  {0,1,3,11},
+  {0,1,13,12,7},
+  {0,1,13},
+  {0,1,8,14},
+  {0,1,4,14,15}
+ }
+ 
+	colors={res=res}
+	
+	for i=0,15 do
+ 	local h=hues[i+1]
+ 	local hi=1
+ 	local hstep=res\(#h-1)
+		colors[i]={}
+			
+		for j=0,res do
+		 local b=smoothstep(0,#bright,(j%hstep)/hstep)
+		 if j>0 and j%hstep==0 then 
+		  hi=hi+1
+		 end
+		 
+		 -- setting first bit of the color
+		 -- this enables the fill pattern stuff
+		 local cleft=bor(0x1000,h[hi])
+		 local cright=h[min(hi+1,#h)]
+		 
+		 colors[i][j]=bor(cleft,shl(cright,4))
+		 colors[i][j]+=bright[flr(b)+1]
+		end
+	end
+end
+
+function hcolor(base,light)
+	local l=light*colors.res
+	return colors[base][flr(l)]
 end
 __gfx__
 000000008888888899999999aaaaaaaabbbbbbbbcccccccc00000000000000000000000000000000000000000000000000000000000000000000000000000000
