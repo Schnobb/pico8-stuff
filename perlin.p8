@@ -25,6 +25,8 @@ function _init()
  draw=true
  debug=false
  
+ interp=smoothstep
+ 
  local seed=nil
  init_grad(seed)
  init_color_ramp()
@@ -77,9 +79,9 @@ function draw_cloud()
 	 		v*=perlin(x1,y1)
 	 		
 	 		local x2=x+y_idx
-	 		local y2=(y/screenh)*3
+	 		local y2=(y/screenh)*4
 	 		
-	 		x2=(x2/screenw)*3
+	 		x2=(x2/screenw)*4
 	 		v/=perlin(x2,y2)
 	 		
 	 		local c=col(10,min(127,v*127))
@@ -151,15 +153,15 @@ function perlin(x,y)
  
  n0=dot_grad(x0,y0,x,y)
  n1=dot_grad(x1,y0,x,y)
- ix0=lerp(n0,n1,sx)
+ ix0=interp(n0,n1,sx)
  
  n0=dot_grad(x0,y1,x,y)
  n1=dot_grad(x1,y1,x,y)
- ix1=lerp(n0,n1,sx)
+ ix1=interp(n0,n1,sx)
  
  --print("asdf:"..n0..","..n1)
  
- return (lerp(ix0,ix1,sy)+1)/2
+ return (interp(ix0,ix1,sy)+1)/2
 end
 -->8
 -- util
@@ -219,6 +221,12 @@ end
 
 function lerp(x1,x2,w)
  return (1-w)*x1+w*x2
+end
+
+function smoothstep(h1,h2,t)
+	t=mid(t,0,1)
+	t=(t*t*(3-2*t))
+	return (h2-h1)*t+h1
 end
 -->8
 -- color stuff
