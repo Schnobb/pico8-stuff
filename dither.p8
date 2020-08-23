@@ -11,6 +11,7 @@ function _init()
  interp=interp_list[interp_idx+1].f
  
  color_res=32
+ bright_pat=nil
  init_colors(color_res)
 end
 
@@ -32,11 +33,16 @@ function _update()
 	 regen=true
 	end
 	
+	if btnp(❎) then
+	 bright_pat=gen_rnd_pat()
+	 regen=true
+	end
+	
 	interp=interp_list[interp_idx+1].f
 	interp(0,1,0.5)
 	
 	if regen then
-	 init_colors(color_res)
+	 init_colors(color_res,bright_pat)
 	end
 end
 
@@ -59,14 +65,14 @@ end
 -->8
 --colors
 
-function init_colors(res)
+function init_colors(res,bright)
  -- enable color fill patterns
  poke(0x5f34,1)
  
  -- res: resolution of brightness gradient, default 128
  res=res or 128
  
- local bright={
+ bright=bright or {
   0b0.1000000000000000,
   0b0.1000000000100000,
   0b0.1000000010100000,
@@ -97,7 +103,7 @@ function init_colors(res)
   {0,1,2,8},
   {0,1,2,4,9},
   {0,1,2,4,9,10,7},
-  {0,1,3,11},
+  {0,1,3,11,11,7},
   {0,1,13,12,7},
   {0,1,13},
   {0,1,8,14},
@@ -106,15 +112,15 @@ function init_colors(res)
  
 	colors={res=res}
 	
-	for i=0,15 do
+	for i=0,#hues-1 do
  	local h=hues[i+1]
- 	local hi=1
+ 	local hi=0
  	local hstep=res\(#h-1)
 		colors[i]={}
 			
 		for j=0,res do
 		 local b=interp(0,#bright,(j%hstep)/hstep)
-		 if j>0 and j%hstep==0 then 
+		 if j%hstep==0 then 
 		  hi=hi+1
 		 end
 		 
@@ -130,7 +136,7 @@ function init_colors(res)
 end
 
 function hcolor(base,light)
-	local l=light*colors.res
+	local l=min(light,1)*colors.res
 	return colors[base][flr(l)]
 end
 -->8
@@ -209,6 +215,32 @@ function init_colors_wip(res)
 		 
 		end
 	end
+end
+
+function next_rnd_pat(prev)
+ while prev!=0xffff do
+  local bit=flr(rnd(16))
+  if band(2^bit,prev)==0 then
+   return bor(2^bit,prev)
+  end
+ end
+ 
+ return nil
+end
+
+function gen_rnd_pat()
+ local pats={0}
+ 
+ for i=1,16 do
+  local n=next_rnd_pat(pats[i])
+  add(pats,n)
+ end
+ 
+ for i=1,#pats do
+ 	pats[i]=band(0x0000.ffff,pats[i]>>16)
+ end
+ 
+ return pats
 end
 __gfx__
 00000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000

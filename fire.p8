@@ -8,7 +8,7 @@ local buffer={}
 local wind=0.6
 
 function _init()
- lowres = false
+ lowres = true
  buffer_size = 127
  
  if lowres then

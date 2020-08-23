@@ -25,6 +25,7 @@ function _init()
  
  draw=true
  debug=true
+ rnd_pat=true
  
  interp_list={
   {f=lerp,name="lerp"},
@@ -38,8 +39,14 @@ function _init()
  col_idx=10
  
  local seed=nil
+ local bpat=nil
+ 
+ if rnd_pat then
+  bpat=gen_rnd_pat()
+ end
+ 
  init_grad(seed)
- init_colors(64)
+ init_colors(64,bpat)
 end
 
 function _update60()
@@ -67,6 +74,9 @@ function handle_inputs()
  
  if btnp(🅾️) then 
   init_grad()
+  if rnd_pat then
+   init_colors(64,gen_rnd_pat())
+  end
   draw=true
  end
  
@@ -275,14 +285,14 @@ end
 -->8
 --colors
 
-function init_colors(res)
+function init_colors(res,bright)
  -- enable color fill patterns
  poke(0x5f34,1)
  
- -- res: resolution of brightness gradiant, default 128
+ -- res: resolution of brightness gradient, default 128
  res=res or 128
  
- local bright={
+ bright=bright or {
   0b0.1000000000000000,
   0b0.1000000000100000,
   0b0.1000000010100000,
@@ -313,7 +323,7 @@ function init_colors(res)
   {0,1,2,8},
   {0,1,2,4,9},
   {0,1,2,4,9,10,7},
-  {0,1,3,11},
+  {0,1,3,11,11,7},
   {0,1,13,12,7},
   {0,1,13},
   {0,1,8,14},
@@ -322,16 +332,15 @@ function init_colors(res)
  
 	colors={res=res}
 	
-	for i=0,15 do
+	for i=0,#hues-1 do
  	local h=hues[i+1]
- 	local hi=1
+ 	local hi=0
  	local hstep=res\(#h-1)
 		colors[i]={}
 			
 		for j=0,res do
 		 local b=smoothstep(0,#bright,(j%hstep)/hstep)
-		 b=flr(b)
-		 if j>0 and j%hstep==0 then 
+		 if j%hstep==0 then 
 		  hi=hi+1
 		 end
 		 
@@ -341,7 +350,7 @@ function init_colors(res)
 		 local cright=h[min(hi+1,#h)]
 		 
 		 colors[i][j]=bor(cleft,shl(cright,4))
-		 colors[i][j]+=bright[b+1]
+		 colors[i][j]+=bright[flr(b)+1]
 		end
 	end
 end
@@ -349,6 +358,32 @@ end
 function hcolor(base,light)
 	local l=light*colors.res
 	return colors[base][flr(l)]
+end
+
+function next_rnd_pat(prev)
+ while prev!=0xffff do
+  local bit=flr(rnd(16))
+  if band(2^bit,prev)==0 then
+   return bor(2^bit,prev)
+  end
+ end
+ 
+ return nil
+end
+
+function gen_rnd_pat()
+ local pats={0}
+ 
+ for i=1,16 do
+  local n=next_rnd_pat(pats[i])
+  add(pats,n)
+ end
+ 
+ for i=1,#pats do
+ 	pats[i]=band(0x0000.ffff,pats[i]>>16)
+ end
+ 
+ return pats
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
