@@ -25,7 +25,7 @@ function _init()
  
  draw=true
  debug=true
- rnd_pat=true
+ rnd_pat=false
  
  interp_list={
   {f=lerp,name="lerp"},
