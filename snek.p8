@@ -2,6 +2,8 @@ pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
 function _init()
+ pi=3.1415
+ 
  snake={
   x=15,
   y=15,
@@ -17,10 +19,35 @@ function _init()
   speed=10,
   fade_speed=1,
   debug={},
+  light_t=0,
+  max_light_t=20,
+  light_trig_t=0,
+  max_light_trig_t=360,
+  shake=0,
   
   mode="",
   title="sand-snake"
  }
+ 
+ part={
+  pill={}
+ }
+ 
+ perl={
+  maxx=128,
+  maxy=128,
+  screenw=16,
+  screenh=16,
+  spd_mod=0.05,
+  col=9,
+  grad={},
+  interp=smoothstep,
+  x=64,
+  y=64
+ }
+ 
+ init_grad()
+ init_colors()
  
  scl=4
  pill={}
@@ -50,9 +77,10 @@ function _draw()
   draw_dead()
  end
  
+ camera()
  for _,v in pairs(gs.debug) do
-  color(0)
-  print(v)
+  color(7)
+  printb(v,7)
  end
 end
 
@@ -97,10 +125,15 @@ function tick()
  snake.x=snake.x%(128\scl)
  snake.y=snake.y%(128\scl)
  
+ perl.x=mid(0,perl.x+snake.sx*perl.spd_mod,perl.maxx)
+ perl.y=mid(0,perl.y+snake.sy*perl.spd_mod,perl.maxy)
+  
  if collide(snake.x,snake.y,pill[1],pill[2]) then
   sfx(0)
+  shakescr(5)
   snake.total+=1
   rndpill()
+  part_pill(snake.x*scl,snake.y*scl)
  end
  
  if collide_tail(snake.x,snake.y) then
@@ -109,10 +142,12 @@ function tick()
 end
 
 function rndpill()
- local x,y=pill[1],pill[2]
- while collide(pill[1],pill[2],x,y) or collide_tail(pill[1],pill[2]) do
+ local x,y
+ 
+ repeat
   x,y=flr(rnd(127\scl)),flr(rnd(127\scl))
- end
+ until not collide(snake.x,snake.y,x,y) and not collide_tail(x,y)
+ 
  pill={x,y}
 end
 
@@ -137,6 +172,17 @@ function update_start()
   
   gs.tick+=gs.fade_speed
  else
+  if gs.light_trig_t<=0 and gs.light_t<=0 then
+   sfx(2)
+   shakescr(10)
+   gs.light_t=gs.max_light_t
+   local r=((rnd()-0.5)*2) * (gs.max_light_trig_t*0.25)
+   gs.light_trig_t=gs.max_light_trig_t+r
+  else
+   gs.light_trig_t=max(0,gs.light_trig_t-1)
+   gs.light_t=max(0,gs.light_t-1)
+  end
+ 
   if btnp(❎) then
 	  sfx(1)
 	  gs.tick=1
@@ -145,6 +191,10 @@ function update_start()
 end
 
 function update_game()
+ for _,p in pairs(part.pill) do
+  part_pill_update(p)
+ end
+ 
  if btnp(⬆️) then
   snake.sx=0 snake.sy=-1
  elseif btnp(⬇️) then
@@ -178,18 +228,31 @@ end
 -->8
 -- draw
 function draw_start()
+ drawshake()
  if gs.tick<=0 then
-  cls(0)
+  local backcol=0
+  
+  if gs.light_t>0 then
+   if gs.light_t>0.75*gs.max_light_t then
+    cls(7)
+    return
+   end
+   
+   if rnd()>0.15 then backcol=7 end
+  end
+  
+  cls(backcol)
   sspr(0,8,127,90,0,127-90)
+  
+  camera()
   
   local sw,sh=#gs.title*4,6
   local x,y=128/2-sw\2,128/2-sh\2-16
-  printwob(gs.title,x,y,4,0.5,1)
-  printwob(gs.title,x,y,5,0.5,2)
-  printwob(gs.title,x,y,6,0.5,4)
-  printwob(gs.title,x,y,7,0.5,9)
-  printwob(gs.title,x,y,8,0.5,12)
-  printwob(gs.title,x,y,9,0.5,6)
+  printwob(gs.title,x,y,5,0.5,1)
+  printwob(gs.title,x,y,6,0.5,2)
+  printwob(gs.title,x,y,7,0.5,4)
+  printwob(gs.title,x,y,8,0.5,9)
+  printwob(gs.title,x,y,9,0.5,12)
   printwob(gs.title,x,y,10,0.5,7)
   
   local msg="press ❎ to start"
@@ -210,7 +273,9 @@ function printwob(str,x,y,of,spd,col)
 end
 
 function draw_game()
+ drawshake()
  cls(1)
+ drawcloud()
  
  for _,tail in pairs(snake.tail) do
   drawseg(tail[1],tail[2],15)
@@ -218,9 +283,12 @@ function draw_game()
  
  drawseg(pill[1],pill[2],12)
  drawseg(snake.x,snake.y,14)
+ 
+ drawpart()
 end
 
 function draw_dead()
+ drawshake()
  if gs.tick==0 then
   cls(10)
 	 for i=0,16 do
@@ -256,12 +324,315 @@ end
 
 function choice(arr)
  local r=flr(rnd(#arr))+1
- --debug(r)
  return arr[r]
 end
 
 function drawseg(x,y,col)
- rectfill(x*scl,y*scl,(x+1)*scl-1,(y+1)*scl-1,col)
+ rectfill(x*scl,y*scl,(x+1)*scl-1,(y+1)*scl-1,hcolor(col,1))
+end
+
+function drawshake()
+ local ofx,ofy=rnd(gs.shake)-gs.shake/2,rnd(gs.shake)-gs.shake/2
+ 
+ gs.shake=max(gs.shake-1,0)
+ camera(ofx,ofy)
+end
+
+function drawpart()
+ for _,p in pairs(part.pill) do
+  local w,h=scl*p.scl,scl*p.scl
+  local x,y=(p.x+scl/2)-w/2,(p.y+scl/2)-h/2
+  rectfill(x,y,x+w,y+h,hcolor(p.c,1))
+ end
+end
+
+function drawcloud()
+ local xres,yres=flr(128/perl.screenw),flr(128/perl.screenh)
+ 
+ for y=0,perl.screenh do
+  for x=0,perl.screenw do
+   local x0=(x/perl.screenw)+perl.x
+   local y0=(y/perl.screenh)+perl.y
+   local v=perlin(x0,y0)
+   local c=hcolor(perl.col,min(v,1))
+   rectfill(x*xres,y*yres,x*xres+xres,y*yres+yres,c)
+  end
+ end
+end
+-->8
+-- utils
+
+function shakescr(mag)
+ gs.shake=mag
+end
+
+function printb(str,colf,colb,x,y)
+ str=str and str.."" or ""
+ colf=colf or peek(0x5f25)
+ colb=colb or 0
+ x=x or peek(0x5f26)
+ y=y or peek(0x5f27)
+ local w,h=#str*4,6
+ rectfill(x,y,x+w,y+h,colb)
+ print(str,x+1,y+1,colf)
+ poke(0x5f27,y+6)
+ poke(0x5f26,x)
+end
+
+-- linear algebra stuff
+function vec2(x,y)
+ return {
+  x=x,
+  y=y,
+  norm=function(self)
+   local l=len(self.x,self.y)
+   self.x/=l
+   self.y/=l
+   return self
+  end
+ }
+end
+
+function len(x,y)
+ return sqrt(x^2+y^2)
+end
+
+function rot2d(vec,r)
+ return vec2(
+  vec.x*cosr(r)-vec.y*sinr(r),
+  vec.x*sinr(r)+vec.y*cosr(r)
+ )
+end
+
+function rot(x,y,r)
+ return x*cosr(r)-y*sinr(r),x*sinr(r)+y*cosr(r)
+end
+
+function rad2deg(r)
+ return r*180/pi
+end
+
+function deg2rad(d)
+ return d*pi/180
+end
+
+function sinr(r)
+ return sin(r/(2*pi))
+end
+
+function cosr(r)
+ return cos(r/(2*pi))
+end
+
+function tanr(r)
+ return sinr(r)/cosr(r)
+end
+
+-- maths stuff
+function decimal(x)
+ return x-flr(x)
+end
+
+function lerp(x1,x2,w)
+ return (1-w)*x1+w*x2
+end
+
+function smoothstep(x1,x2,w)
+	w=mid(w,0,1)
+	w=(w*w*(3-2*w))
+	--w=-2*w^3+3*w^2
+	return (x2-x1)*w+x1
+end
+
+function smootherstep(x1,x2,w)
+	w=mid(w,0,1)
+	--w=w*w*w*(10+(-15+6*w)*w)
+	w=w*w*w*(w*(w*6-15)+10)
+	--w=6*w^5-15*w^4+10*w^3
+	return (x2-x1)*w+x1
+end
+-->8
+-- part
+
+function part_pill(x,y)
+ local p={
+  x=x,
+  y=y,
+  t=0,
+  max_t=10,
+  c=12,
+  c_ramp={12,6,7},
+  scl=1,
+  scl_spd=1.1
+ }
+ 
+ add(part.pill,p)
+end
+
+function part_pill_update(p)
+ if p.t>=p.max_t then
+  del(part.pill,p)
+  return
+ end
+ 
+ p.t+=1
+ p.scl*=p.scl_spd
+ 
+ local r=flr((p.t/p.max_t)*#p.c_ramp)+1
+ r=mid(1,r,#p.c_ramp)
+ p.c=p.c_ramp[r]
+end
+-->8
+-- noise
+
+function init_grad(seed)
+ perl.grad={}
+ if seed then srand(seed) end
+ 
+ for y=0,perl.maxy do
+  perl.grad[y]={}
+ 	for x=0,perl.maxx do
+ 	 -- initiates a vector and 
+ 	 -- rotates it randomly in
+ 	 -- a 360 deg angle
+ 	 
+ 		local v=vec2(1,0)
+ 		v=rot2d(v,rnd(pi*2))
+ 	 v:norm()
+ 		perl.grad[y][x]=v
+		end
+ end
+end
+
+function dot_grad(ix,iy,x,y)
+ local dx,dy=x-ix,y-iy
+ return dx*perl.grad[iy][ix].x + dy*perl.grad[iy][ix].y
+end
+
+function perlin(x,y)
+ local x0,x1=flr(x),flr(x)+1
+ local y0,y1=flr(y),flr(y)+1
+ 
+ x0=x0%perl.maxx
+ y0=y0%perl.maxy
+ x1=x1%perl.maxx
+ y1=y1%perl.maxy
+
+ local sx,sy=x-x0,y-y0
+ local n0,n1,ix0,ix1
+ 
+ n0=dot_grad(x0,y0,x,y)
+ n1=dot_grad(x1,y0,x,y)
+ ix0=perl.interp(n0,n1,sx)
+ 
+ n0=dot_grad(x0,y1,x,y)
+ n1=dot_grad(x1,y1,x,y)
+ ix1=perl.interp(n0,n1,sx)
+ 
+ return (perl.interp(ix0,ix1,sy)+1)/2
+end
+-->8
+-- color stuff
+
+function init_colors(res,bright)
+ -- enable color fill patterns
+ poke(0x5f34,1)
+ 
+ -- res: resolution of brightness gradient, default 128
+ res=res or 128
+ 
+ bright=bright or {
+  0b0.1000000000000000,
+  0b0.1000000000100000,
+  0b0.1000000010100000,
+  0b0.1010000010100000,
+  0b0.1010010010100000,
+  0b0.1010010010100001,
+  0b0.1010010010100101,
+  0b0.1010010110100101,
+  0b0.1110010110100101,
+  0b0.1110010110110101,
+  0b0.1110010111110101,
+  0b0.1111010111110101,
+  0b0.1111010111110111,
+  0b0.1111110111110111,
+  0b0.1111110111111111,
+  0b0.1111111111111111
+ }
+ 
+ local hues={
+  {0},
+  {0,1},
+  {0,1,2},
+  {0,1,3},
+  {0,1,2,4},
+  {0,1,5},
+  {0,1,5,6},
+  {0,1,5,6,7},
+  {0,1,2,8},
+  {0,1,2,4,9},
+  {0,1,2,4,9,10},
+  {0,1,3,11,11},
+  {0,1,13,12},
+  {0,1,13},
+  {0,1,8,14},
+  {0,1,4,14,15}
+ }
+ 
+	colors={res=res}
+	
+	for i=0,#hues-1 do
+ 	local h=hues[i+1]
+ 	local hi=0
+ 	local hstep=res\(#h-1)
+		colors[i]={}
+			
+		for j=0,res do
+		 local b=smoothstep(0,#bright,(j%hstep)/hstep)
+		 if j%hstep==0 then 
+		  hi=hi+1
+		 end
+		 
+		 -- setting first bit of the color
+		 -- this enables the fill pattern stuff
+		 local cleft=bor(0x1000,h[hi])
+		 local cright=h[min(hi+1,#h)]
+		 
+		 colors[i][j]=bor(cleft,shl(cright,4))
+		 colors[i][j]+=bright[flr(b)+1]
+		end
+	end
+end
+
+function hcolor(base,light)
+	local l=light*colors.res
+	return colors[base][flr(l)]
+end
+
+function next_rnd_pat(prev)
+ while prev!=0xffff do
+  local bit=flr(rnd(16))
+  if band(2^bit,prev)==0 then
+   return bor(2^bit,prev)
+  end
+ end
+ 
+ return nil
+end
+
+function gen_rnd_pat()
+ local pats={0}
+ 
+ for i=1,16 do
+  local n=next_rnd_pat(pats[i])
+  add(pats,n)
+ end
+ 
+ for i=1,#pats do
+ 	pats[i]=band(0x0000.ffff,pats[i]>>16)
+ end
+ 
+ return pats
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -362,8 +733,8 @@ fff9ffffff9900090000000000000009000000000000000002224421221111111111111111101000
 __sfx__
 00020000083100831008310083100a3100b3100c3100f31010310143101731011310113101131011310133101431016310183101a310133101331013310143101631017310193101a3101c3101d3101e31021310
 00020000045200452006520085200e52016520135200e520095200552005520095200f520155201d520145200f5200d5200c5200d520155201d5201b520125200e5200f52012520175201c520225202a52031520
-001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000900001c6201c6201d61021610276302c630376301e6301b6201862017620176201961018610136100f6100c6100b6100a6100961009610096100a6100b6100761004610036100261001610016100161001610
+010500000062000620006310163002630036300363004630036300363002630026210162001620006200062000620006200162002611026100261002610016100161000610006010060000600006000060000600
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -376,9 +747,10 @@ __sfx__
 012000003f3103f3103f3103f3003f3003f3103f3103f3003f3103f3103f3003f3103f3003f3103f3103f3103f3003f3103f3003f3003f3003f3103f3103f3103f3003f3003f3103f3103f3003f3003f3103f310
 012000000061000610006100061000610006100061000610006100061000610006100061000610006100061000610006100061000610006100061000610006100061000610006100061000610006100061000610
 012000000002400024000240002400024000240002400024000240002400024000240002400024000240002400024000240002400024000240002400024000240002400024000240002400024000240002400024
+012000000c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c6100c610
 __music__
-00 0a424344
-03 0a0b4344
+00 0a421044
+03 0a0b1044
 03 0c0d4344
 03 0e0f4344
 
