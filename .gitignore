@@ -7,3 +7,5 @@ downloads/
 *.exe
 *.dll
 *.log
+*.html
+*.js
