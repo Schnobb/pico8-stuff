@@ -10,20 +10,27 @@ function _init()
   cur_max_timer=60,
   mine_cnt=30,
   ind_col={},
-  mines_laid=false
+  mines_laid=false,
+  mines={},
+  game_over=false,
+  w=16,
+  h=14
  }
  
- debug={
-  reveal=true
+ gs_debug={
+  reveal=false,
+  show=true,
+  dbg={}
  }
  
- init_tiles(16,16)
- --init_mines(gs.mine_cnt)
+ init_tiles(gs.w,gs.h)
  init_ind_col()
 end
 
 function _update60()
+ gs_debug.dbg={}
  handle_inputs()
+ --debug("test")
 end
 
 function _draw()
@@ -47,21 +54,30 @@ function _draw()
     s=1
    end
    
-   spr(s,x*8,y*8)
+   local p=t2p(x,y)
+   
+   spr(s,p.x,p.y)
    
    if draw_ind then
     if t.mine_cnt!=nil and t.mine_cnt>0 then
      local col=gs.ind_col[t.mine_cnt]
-     print(t.mine_cnt,x*8+3,y*8+2,col)
+     local p=t2p(x,y)
+     print(t.mine_cnt,p.x+3,p.y+2,col)
     end
    end
   end
  end
  
- draw_cursor(gs.cur_x, gs.cur_y)
+ if gs.game_over then
+  draw_game_over()
+ else
+  draw_cursor(gs.cur_x, gs.cur_y)
+ end
+ 
+ draw_debug()
 end
 
-function draw_cursor(x,y)
+function draw_cursor(x,y) 
  local col=12
  
  if gs.cur_timer<gs.cur_max_timer/2 then
@@ -74,10 +90,21 @@ function draw_cursor(x,y)
   gs.cur_timer-=1
  end
  
- rect(x*8+1,y*8+1,x*8+8-1,y*8+8-1,col)
+ local p1=t2p(x,y)
+ local p2=t2p(x+1,y+1)
+ 
+ rect(p1.x+1,p1.y+1,p2.x-1,p2.y-1,col)
 end
 
 function handle_inputs()
+ if gs.game_over then
+  if btnp(❎) then
+   _init()
+  end
+  
+  return
+ end
+
  if btnp(⬆️) then
   gs.cur_y-=1
  end
@@ -94,8 +121,8 @@ function handle_inputs()
   gs.cur_x-=1
  end
  
- gs.cur_x=gs.cur_x%16
- gs.cur_y=gs.cur_y%16
+ gs.cur_x=gs.cur_x%gs.w
+ gs.cur_y=gs.cur_y%gs.h
  
  if btnp(❎) then
   if not gs.mines_laid then
@@ -109,12 +136,48 @@ function handle_inputs()
   flag_tile(gs.cur_x, gs.cur_y)
  end
 end
+
+function draw_debug()
+ if gs_debug.show then
+  color()
+  cursor()
+  
+  for d in all(gs_debug.dbg) do
+   print(d)
+  end
+ end
+end
+
+function draw_game_over()
+ -- rectangle
+ local y0=128/2-6*2-3
+ local y1=128/2+6*2+3
+ --rectfill(0,y0,127,y1,0)
+ 
+ -- "game over"
+ printcb("game over",8,0,128/2-7)
+ 
+ -- flashing "press ❎ to restart"
+ local col=5
+ 
+ if gs.cur_timer<gs.cur_max_timer/2 then
+  col=7
+ end
+ 
+ if gs.cur_timer<=0 then
+  gs.cur_timer=gs.cur_max_timer
+ else
+  gs.cur_timer-=1
+ end
+ 
+ printcb("press ❎ to restart",col,0,128/2+6)
+end
 -->8
 -- inits
 
-function init_tiles(max_x,max_y)
- for x=0,max_x do
-  for y=0,max_y do
+function init_tiles(max_x,max_y) 
+ for x=0,max_x-1 do
+  for y=0,max_y-1 do
    if gs.tiles[x] == nil then
     gs.tiles[x]={}
    end
@@ -127,14 +190,16 @@ end
 function init_mines(cnt,cx,cy)
  for i=0,cnt do  
   while true do
-   local x,y=flr(rnd(16)),flr(rnd(16))
+   local x,y=flr(rnd(gs.w)),flr(rnd(gs.h))
    local skip=x==cx and y==cy
+   local t=gs.tiles[x][y]
    
-   if not skip and not gs.tiles[x][y].mine then
-    gs.tiles[x][y].mine=true
+   if not skip and not t.mine then
+    t.mine=true
+    add(gs.mines,t)
     
-    if debug.reveal then
-     gs.tiles[x][y].state=tile_state.revealed
+    if gs_debug.reveal then
+     t.state=tile_state.revealed
     end
     
     break
@@ -180,9 +245,14 @@ function reveal_tile(x,y)
  local neighbors={}
  
  if tile.state==tile_state.hidden then
+  if tile.mine then
+   game_over()
+   return
+  end
+  
   for i=-1,1 do
    for j=-1,1 do
-    if x+i>=0 and x+i<16 and y+j>=0 and y+j<16 then
+    if x+i>=0 and x+i<gs.w and y+j>=0 and y+j<gs.h then
      if not(i==0 and j==0) then
       add(neighbors,{x+i,y+j})
      end
@@ -218,6 +288,50 @@ function flag_tile(x,y)
  elseif tile.state==tile_state.flagged then
   tile.state=tile_state.hidden
  end
+end
+
+function game_over()
+ for t in all(gs.mines) do
+  t.state=tile_state.revealed
+ end
+ 
+ gs.game_over=true
+end
+-->8
+-- utils
+
+function debug(txt)
+ add(gs_debug.dbg,txt)
+end
+
+function printc(txt,col,y)
+ local x=128/2-#txt/2*4
+ print(txt,x,y,col)
+end
+
+function printb(txt,col1,col2,x,y)
+ local dirx={0,1,1,1,0,-1,-1,-1}
+ local diry={-1,-1,0,1,1,1,0,-1}
+ for i=1,8 do
+  print(txt,x+dirx[i],y+diry[i],col2)
+ end
+ print(txt,x,y,col1)
+end
+
+function printcb(txt,col1,col2,y)
+ local x=128/2-#txt/2*4
+ printb(txt,col1,col2,x,y)
+end
+
+function t2p(x,y)
+ -- tile to pixel coord
+ local ix,iy=max(16-gs.w,0),max(16-gs.h,0)
+ ix=ceil(ix/2)
+ iy=ceil(iy/2)
+ 
+ local rx,ry=(x+ix)*8,(y+iy)*8
+ 
+ return {x=rx,y=ry}
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
