@@ -14,7 +14,13 @@ function _init()
   mines={},
   game_over=false,
   w=16,
-  h=14
+  h=14,
+  ticks=0,
+  flags=0,
+  back_col=0,
+  flagged_tiles={},
+  won=false,
+  hidden_tiles=0
  }
  
  gs_debug={
@@ -30,15 +36,20 @@ end
 function _update60()
  gs_debug.dbg={}
  handle_inputs()
+ 
+ if not gs.game_over and not gs.won then
+  eval_state()
+  gs.ticks+=1
+ end
  --debug("test")
 end
 
 function _draw()
- cls()
+ cls(gs.back_col)
  
  for x,c in pairs(gs.tiles) do
   for y,t in pairs(c) do
-   local s
+   local s,s2=nil,nil
    local draw_ind=false
    
    if t.state == tile_state.revealed then
@@ -49,14 +60,21 @@ function _draw()
      draw_ind=true
     end
    elseif t.state == tile_state.flagged then
-				s=2
+				s=1
+				s2=2
    else
     s=1
    end
    
    local p=t2p(x,y)
    
-   spr(s,p.x,p.y)
+   if s!=nil then
+    spr(s,p.x,p.y)
+   end
+   
+   if s2!=nil then
+    spr(s2,p.x,p.y)
+   end
    
    if draw_ind then
     if t.mine_cnt!=nil and t.mine_cnt>0 then
@@ -70,10 +88,13 @@ function _draw()
  
  if gs.game_over then
   draw_game_over()
+ elseif gs.won then
+  draw_won()
  else
   draw_cursor(gs.cur_x, gs.cur_y)
  end
  
+ draw_hud() 
  draw_debug()
 end
 
@@ -97,7 +118,7 @@ function draw_cursor(x,y)
 end
 
 function handle_inputs()
- if gs.game_over then
+ if gs.game_over or gs.won then
   if btnp(❎) then
    _init()
   end
@@ -134,6 +155,7 @@ function handle_inputs()
  
  if btnp(🅾️) then
   flag_tile(gs.cur_x, gs.cur_y)
+  --won()
  end
 end
 
@@ -172,6 +194,37 @@ function draw_game_over()
  
  printcb("press ❎ to restart",col,0,128/2+6)
 end
+
+function draw_hud()
+ -- time
+ local t=format_time(gs.ticks)
+ print(t,3,2,7)
+ 
+ -- flags
+ spr(2,128-9,0)
+ local t=gs.flags.."/"..gs.mine_cnt
+ print(t,128-#t*4-9,2,7)
+end
+
+function draw_won() 
+ -- "you won!"
+ printcb("you won!",11,0,128/2-7)
+ 
+ -- flashing "press ❎ to restart"
+ local col=5
+ 
+ if gs.cur_timer<gs.cur_max_timer/2 then
+  col=7
+ end
+ 
+ if gs.cur_timer<=0 then
+  gs.cur_timer=gs.cur_max_timer
+ else
+  gs.cur_timer-=1
+ end
+ 
+ printcb("press ❎ to restart",col,0,128/2+6)
+end
 -->8
 -- inits
 
@@ -185,10 +238,14 @@ function init_tiles(max_x,max_y)
    gs.tiles[x][y]=new_tile()
   end
  end
+ 
+ gs.hidden_tiles=max_x*max_y
+ gs.cur_x=flr((max_x-1)/2)
+ gs.cur_y=flr((max_y-1)/2)
 end
 
 function init_mines(cnt,cx,cy)
- for i=0,cnt do  
+ for i=0,cnt-1 do  
   while true do
    local x,y=flr(rnd(gs.w)),flr(rnd(gs.h))
    local skip=x==cx and y==cy
@@ -244,38 +301,41 @@ function reveal_tile(x,y)
  local tile=gs.tiles[x][y]
  local neighbors={}
  
- if tile.state==tile_state.hidden then
-  if tile.mine then
-   game_over()
-   return
-  end
-  
-  for i=-1,1 do
-   for j=-1,1 do
-    if x+i>=0 and x+i<gs.w and y+j>=0 and y+j<gs.h then
-     if not(i==0 and j==0) then
-      add(neighbors,{x+i,y+j})
-     end
+ if tile.state!=tile_state.hidden then
+  return
+ end
+ 
+ if tile.mine then
+  game_over()
+  return
+ end
+ 
+ for i=-1,1 do
+  for j=-1,1 do
+   if x+i>=0 and x+i<gs.w and y+j>=0 and y+j<gs.h then
+    if not(i==0 and j==0) then
+     add(neighbors,{x+i,y+j})
     end
    end
   end
-  
-  tile.state=tile_state.revealed
-  
-  local mines=0
-  for n in all(neighbors) do
-   local ntile=gs.tiles[n[1]][n[2]]
-   if ntile.mine then
-    mines+=1
-   end
+ end
+ 
+ tile.state=tile_state.revealed
+ gs.hidden_tiles-=1
+ 
+ local mines=0
+ for n in all(neighbors) do
+  local ntile=gs.tiles[n[1]][n[2]]
+  if ntile.mine then
+   mines+=1
   end
-  
-  tile.mine_cnt=mines
-  
-  if mines<=0 then
-   for n in all(neighbors) do
-    reveal_tile(n[1],n[2])
-   end
+ end
+ 
+ tile.mine_cnt=mines
+ 
+ if mines<=0 then
+  for n in all(neighbors) do
+   reveal_tile(n[1],n[2])
   end
  end
 end
@@ -284,10 +344,18 @@ function flag_tile(x,y)
  local tile=gs.tiles[x][y]
  
  if tile.state==tile_state.hidden then
+  if gs.flags>=gs.mine_cnt then
+   return
+  end
+  
+  add(gs.flagged_tiles,tile)
   tile.state=tile_state.flagged
  elseif tile.state==tile_state.flagged then
+  del(gs.flagged_tiles,tile)
   tile.state=tile_state.hidden
  end
+ 
+ gs.flags=#gs.flagged_tiles
 end
 
 function game_over()
@@ -296,6 +364,49 @@ function game_over()
  end
  
  gs.game_over=true
+end
+
+function won()
+ for x=0,#gs.tiles do
+  for y=0,#gs.tiles[x] do
+   local t=gs.tiles[x][y]
+   
+   if t.state==tile_state.hidden and not contains(gs.mines,t) then
+    reveal_tile(x,y)
+   end
+   
+   if t.state==tile_state.hidden then
+    flag_tile(x,y)
+   end
+  end
+ end
+ 
+ gs.won=true
+end
+
+function eval_state()
+ -- all tiles are revealed
+ if gs.hidden_tiles<=gs.mine_cnt then
+  won()
+  return
+ end
+ 
+ -- all mines are flagged
+ --if #gs.mines<=0 then
+ -- return
+ --end
+ 
+ --local all_flagged=true
+ --for _,t in pairs(gs.mines) do
+ -- if not contains(gs.flagged_tiles,t) then
+ --  all_flagged=false
+ --  break
+ -- end
+ --end
+ 
+ --if all_flagged then
+ -- won()
+ --end
 end
 -->8
 -- utils
@@ -333,12 +444,46 @@ function t2p(x,y)
  
  return {x=rx,y=ry}
 end
+
+function format_time(ticks)
+ local m,s
+ s=flr(ticks/60)
+ m=flr(s/60)
+ 
+ s=s%60
+ 
+ if m>99 then
+  return "99:59"
+ end
+ 
+ return lpad(m,"0",2)..":"..lpad(s,"0",2)
+end
+
+function lpad(txt,pad,len)
+ local res=""..txt
+ 
+ while #res<len do
+  res=pad..res
+ end
+ 
+ return res
+end
+
+function contains(tbl,v)
+ for _,t in pairs(tbl) do
+  if t==v then
+   return true
+  end
+ end
+ 
+ return false
+end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000033333330333333305555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00700700033333330333863305555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00077000033333330338863305555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00077000033333330388863305555555022585220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00700700033333330333363305555555025555520000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000033333330333363305555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000033333330333333305555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000033333330000000005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00700700033333330000860005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00077000033333330008860005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00077000033333330088860005555555022585220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00700700033333330000060005555555025555520000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000033333330000060005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000033333330000000005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
