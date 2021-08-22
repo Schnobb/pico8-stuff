@@ -8,9 +8,9 @@ function _init()
   cur_y=0,
   cur_timer=0,
   cur_max_timer=60,
-  mine_cnt=30,
+  mine_cnt=0,
   ind_col={},
-  mines_laid=false,
+  mines_init=false,
   mines={},
   game_over=false,
   w=16,
@@ -20,143 +20,39 @@ function _init()
   back_col=0,
   flagged_tiles={},
   won=false,
-  hidden_tiles=0
+  hidden_tiles=0,
+  mode=game_mode.menu,
+  cur_diff=2
  }
  
  gs_debug={
   reveal=false,
-  show=true,
-  dbg={}
+  show=false,
+  dbg={},
  }
  
- init_tiles(gs.w,gs.h)
  init_ind_col()
+ init_diffs()
+ init_efx()
 end
 
 function _update60()
  gs_debug.dbg={}
- handle_inputs()
- 
- if not gs.game_over and not gs.won then
-  eval_state()
-  gs.ticks+=1
+ if gs.mode==game_mode.menu then
+  update_menu()
+ elseif gs.mode==game_mode.game then
+  update_game()
  end
- --debug("test")
 end
 
 function _draw()
- cls(gs.back_col)
- 
- for x,c in pairs(gs.tiles) do
-  for y,t in pairs(c) do
-   local s,s2=nil,nil
-   local draw_ind=false
-   
-   if t.state == tile_state.revealed then
-    if t.mine then
-     s=4
-    else
-     s=3
-     draw_ind=true
-    end
-   elseif t.state == tile_state.flagged then
-				s=1
-				s2=2
-   else
-    s=1
-   end
-   
-   local p=t2p(x,y)
-   
-   if s!=nil then
-    spr(s,p.x,p.y)
-   end
-   
-   if s2!=nil then
-    spr(s2,p.x,p.y)
-   end
-   
-   if draw_ind then
-    if t.mine_cnt!=nil and t.mine_cnt>0 then
-     local col=gs.ind_col[t.mine_cnt]
-     local p=t2p(x,y)
-     print(t.mine_cnt,p.x+3,p.y+2,col)
-    end
-   end
-  end
+ if gs.mode==game_mode.menu then
+  draw_menu()
+ elseif gs.mode==game_mode.game then
+  draw_game()
  end
  
- if gs.game_over then
-  draw_game_over()
- elseif gs.won then
-  draw_won()
- else
-  draw_cursor(gs.cur_x, gs.cur_y)
- end
- 
- draw_hud() 
  draw_debug()
-end
-
-function draw_cursor(x,y) 
- local col=12
- 
- if gs.cur_timer<gs.cur_max_timer/2 then
-  col=13
- end
- 
- if gs.cur_timer<=0 then
-  gs.cur_timer=gs.cur_max_timer
- else
-  gs.cur_timer-=1
- end
- 
- local p1=t2p(x,y)
- local p2=t2p(x+1,y+1)
- 
- rect(p1.x+1,p1.y+1,p2.x-1,p2.y-1,col)
-end
-
-function handle_inputs()
- if gs.game_over or gs.won then
-  if btnp(❎) then
-   _init()
-  end
-  
-  return
- end
-
- if btnp(⬆️) then
-  gs.cur_y-=1
- end
- 
- if btnp(⬇️) then
-  gs.cur_y+=1
- end
- 
- if btnp(➡️) then
-  gs.cur_x+=1
- end
- 
- if btnp(⬅️) then
-  gs.cur_x-=1
- end
- 
- gs.cur_x=gs.cur_x%gs.w
- gs.cur_y=gs.cur_y%gs.h
- 
- if btnp(❎) then
-  if not gs.mines_laid then
-   init_mines(gs.mine_cnt,gs.cur_x,gs.cur_y)
-  end
-  
-  reveal_tile(gs.cur_x, gs.cur_y)
- end
- 
- if btnp(🅾️) then
-  flag_tile(gs.cur_x, gs.cur_y)
-  --won()
- end
 end
 
 function draw_debug()
@@ -168,62 +64,6 @@ function draw_debug()
    print(d)
   end
  end
-end
-
-function draw_game_over()
- -- rectangle
- local y0=128/2-6*2-3
- local y1=128/2+6*2+3
- --rectfill(0,y0,127,y1,0)
- 
- -- "game over"
- printcb("game over",8,0,128/2-7)
- 
- -- flashing "press ❎ to restart"
- local col=5
- 
- if gs.cur_timer<gs.cur_max_timer/2 then
-  col=7
- end
- 
- if gs.cur_timer<=0 then
-  gs.cur_timer=gs.cur_max_timer
- else
-  gs.cur_timer-=1
- end
- 
- printcb("press ❎ to restart",col,0,128/2+6)
-end
-
-function draw_hud()
- -- time
- local t=format_time(gs.ticks)
- print(t,3,2,7)
- 
- -- flags
- spr(2,128-9,0)
- local t=gs.flags.."/"..gs.mine_cnt
- print(t,128-#t*4-9,2,7)
-end
-
-function draw_won() 
- -- "you won!"
- printcb("you won!",11,0,128/2-7)
- 
- -- flashing "press ❎ to restart"
- local col=5
- 
- if gs.cur_timer<gs.cur_max_timer/2 then
-  col=7
- end
- 
- if gs.cur_timer<=0 then
-  gs.cur_timer=gs.cur_max_timer
- else
-  gs.cur_timer-=1
- end
- 
- printcb("press ❎ to restart",col,0,128/2+6)
 end
 -->8
 -- inits
@@ -248,8 +88,16 @@ function init_mines(cnt,cx,cy)
  for i=0,cnt-1 do  
   while true do
    local x,y=flr(rnd(gs.w)),flr(rnd(gs.h))
-   local skip=x==cx and y==cy
+   local skip=false
    local t=gs.tiles[x][y]
+   
+   for nx=-1,1 do
+    for ny=-1,1 do
+     if x==cx+nx and y==cy+ny then
+      skip=true
+     end
+    end
+   end
    
    if not skip and not t.mine then
     t.mine=true
@@ -264,7 +112,7 @@ function init_mines(cnt,cx,cy)
   end
  end
  
- gs.mines_laid=true
+ gs.mines_init=true
 end
 
 function init_ind_col()
@@ -277,6 +125,46 @@ function init_ind_col()
  gs.ind_col[7]=8
  gs.ind_col[8]=0
 end
+
+function init_diffs()
+ difficulties={}
+ 
+ add(difficulties,new_diff("easy",16,3))
+ add(difficulties,new_diff("normal",32,7))
+ add(difficulties,new_diff("hard",64,9))
+ add(difficulties,new_diff("impossible",128,8))
+end
+
+function init_game()
+ gs.mines_init=false
+ gs.game_over=false
+ gs.ticks=0
+ gs.flags=0
+ gs.flagged_tiles={}
+ gs.won=false
+ gs.hidden_tiles=0
+ gs.mode=game_mode.menu
+ gs.tiles={}
+ 
+ local diff=difficulties[gs.cur_diff]
+ gs.mine_cnt=diff.mines
+ 
+ init_tiles(gs.w,gs.h)
+ gs.mode=game_mode.game
+end
+
+function init_efx()
+ efx={
+  flash_t=0,
+  flash_col=0,
+  shake_t=0,
+  shake_ot=0,
+  shake_amt=0,
+  shake_att=false,
+  strobe_t=0,
+  strobe_cols={},
+ }
+end
 -->8
 -- objects
 
@@ -284,6 +172,11 @@ tile_state={
  hidden=0,
  revealed=1,
  flagged=2
+}
+
+game_mode={
+ menu=0,
+ game=1,
 }
 
 function new_tile(x,y)
@@ -295,19 +188,28 @@ function new_tile(x,y)
   mine_cnt=nil
  }
 end
+
+function new_diff(name,mines,col)
+ return {
+  name=name,
+  mines=mines,
+  col=col
+ }
+end
 -->8
 -- logic
 function reveal_tile(x,y)
+ local num_revealed=0
  local tile=gs.tiles[x][y]
  local neighbors={}
  
  if tile.state!=tile_state.hidden then
-  return
+  return num_revealed
  end
  
  if tile.mine then
   game_over()
-  return
+  return num_revealed
  end
  
  for i=-1,1 do
@@ -322,6 +224,7 @@ function reveal_tile(x,y)
  
  tile.state=tile_state.revealed
  gs.hidden_tiles-=1
+ num_revealed+=1
  
  local mines=0
  for n in all(neighbors) do
@@ -335,9 +238,11 @@ function reveal_tile(x,y)
  
  if mines<=0 then
   for n in all(neighbors) do
-   reveal_tile(n[1],n[2])
+   num_revealed+=reveal_tile(n[1],n[2])
   end
  end
+ 
+ return num_revealed
 end
 
 function flag_tile(x,y)
@@ -359,6 +264,11 @@ function flag_tile(x,y)
 end
 
 function game_over()
+ strobe(10,{9,10,7,-1})
+ --flash(10,7)
+ shake(20,5,true)
+ sfx(5)
+ sfx(6)
  for t in all(gs.mines) do
   t.state=tile_state.revealed
  end
@@ -416,7 +326,7 @@ function debug(txt)
 end
 
 function printc(txt,col,y)
- local x=128/2-#txt/2*4
+ local x=64-#txt*2
  print(txt,x,y,col)
 end
 
@@ -430,7 +340,7 @@ function printb(txt,col1,col2,x,y)
 end
 
 function printcb(txt,col1,col2,y)
- local x=128/2-#txt/2*4
+ local x=64-(#txt/2)*4
  printb(txt,col1,col2,x,y)
 end
 
@@ -478,6 +388,310 @@ function contains(tbl,v)
  
  return false
 end
+
+function flash(len,col)
+ efx.flash_t=len
+ efx.flash_col=col
+end
+
+function strobe(len,cols)
+ efx.strobe_t=len
+ efx.strobe_cols=cols
+end
+
+function shake(len,amt,att)
+ efx.shake_t=len
+ efx.shake_ot=len
+ efx.shake_amt=amt
+ efx.shake_att=att or false
+end
+-->8
+-- draws
+function draw_game()
+ cls(gs.back_col)
+ 
+ for x,c in pairs(gs.tiles) do
+  for y,t in pairs(c) do
+   local s,s2=nil,nil
+   local draw_ind=false
+   
+   if t.state == tile_state.revealed then
+    if t.mine then
+     s=4
+    else
+     s=3
+     draw_ind=true
+    end
+   elseif t.state == tile_state.flagged then
+				s=1
+				s2=2
+   else
+    s=1
+   end
+   
+   local p=t2p(x,y)
+   
+   if s!=nil then
+    spr(s,p.x,p.y)
+   end
+   
+   if s2!=nil then
+    spr(s2,p.x,p.y)
+   end
+   
+   if draw_ind then
+    if t.mine_cnt!=nil and t.mine_cnt>0 then
+     local col=gs.ind_col[t.mine_cnt]
+     local p=t2p(x,y)
+     print(t.mine_cnt,p.x+3,p.y+2,col)
+    end
+   end
+  end
+ end
+ 
+ if gs.game_over then
+  draw_game_over()
+ elseif gs.won then
+  draw_won()
+ else
+  draw_cursor(gs.cur_x, gs.cur_y)
+ end
+ 
+ draw_hud()
+ draw_shake()
+ draw_flash()
+ draw_strobe()
+end
+
+function draw_cursor(x,y) 
+ local col=12
+ 
+ if gs.cur_timer<gs.cur_max_timer/2 then
+  col=13
+ end
+ 
+ local p1=t2p(x,y)
+ local p2=t2p(x+1,y+1)
+ 
+ rect(p1.x+1,p1.y+1,p2.x-1,p2.y-1,col)
+end
+
+function draw_game_over()
+ -- rectangle
+ local y0=128/2-6*2-3
+ local y1=128/2+6*2+3
+ --rectfill(0,y0,127,y1,0)
+ 
+ -- "game over"
+ printcb("game over",8,0,128/2-7)
+ 
+ -- flashing "press ❎ to restart"
+ local col=5
+ 
+ if gs.cur_timer<gs.cur_max_timer/2 then
+  col=7
+ end
+ 
+ printcb("press ❎ to restart ",col,0,128/2+6)
+end
+
+function draw_hud()
+ -- time
+ local t=format_time(gs.ticks)
+ print(t,3,2,7)
+ 
+ -- flags
+ spr(2,128-9,0)
+ local t=gs.flags.."/"..gs.mine_cnt
+ print(t,128-#t*4-9,2,7)
+end
+
+function draw_won() 
+ -- "you won!"
+ printcb("you won!",11,0,128/2-7)
+ 
+ -- flashing "press ❎ to restart"
+ local col=5
+ 
+ if gs.cur_timer<gs.cur_max_timer/2 then
+  col=7
+ end
+ 
+ printcb("press ❎ to restart ",col,0,128/2+6)
+end
+
+function draw_shake()
+ if efx.shake_t<=0 then
+  camera(0,0)
+  return
+ end
+ 
+ local max_amt=efx.shake_amt
+ 
+ if efx.shake_att then
+  max_amt*=efx.shake_t/efx.shake_ot
+ end
+ 
+ local ox,oy=rnd(max_amt*2)-max_amt,rnd(max_amt*2)-max_amt
+ camera(ox,oy)
+end
+
+function draw_flash()
+ if efx.flash_t<=0 then
+  return
+ end
+ 
+ cls(efx.flash_col)
+end
+
+function draw_strobe()
+ if efx.strobe_t<=0 then
+  return
+ end
+ 
+ local coli=efx.strobe_t%#efx.strobe_cols
+ coli+=1
+ 
+ local col=efx.strobe_cols[coli]
+ 
+ if col<0 then
+  return
+ end
+ 
+ cls(col)
+end
+
+function draw_menu()
+ cls(0)
+ spr(8,32,32,7,7)
+ --line(64,0,64,128,8)
+ printcb("minesweeper",0,7,30)
+ printc("❎/x to dig ",1,128-24)
+ printc("🅾️/z to plant flag ",1,128-18)
+ 
+ local diff=difficulties[gs.cur_diff]
+ local txt="⬅️ "..diff.name.." ➡️  "
+ printcb(txt,7,1,80)
+ printc(diff.name,diff.col,80)
+ 
+ local col=5
+ 
+ if gs.cur_timer<gs.cur_max_timer/2 then
+  col=7
+ end
+ 
+ printcb("press ❎ to start ",col,0,92)
+end
+-->8
+-- updates
+function update_game()
+ update_timers()
+ handle_game_inputs()
+ 
+ if not gs.game_over and not gs.won then
+  eval_state()
+  gs.ticks+=1
+ end
+end
+
+function update_menu()
+ update_timers()
+ handle_menu_inputs()
+ 
+ gs.ticks+=1
+end
+
+function handle_game_inputs()
+ if gs.game_over or gs.won then
+  if btnp(❎) then
+   init_game()
+  end
+  
+  return
+ end
+
+ if btnp(⬆️) then
+  gs.cur_y-=1
+  sfx(0)
+ end
+ 
+ if btnp(⬇️) then
+  gs.cur_y+=1
+  sfx(0)
+ end
+ 
+ if btnp(➡️) then
+  gs.cur_x+=1
+  sfx(0)
+ end
+ 
+ if btnp(⬅️) then
+  gs.cur_x-=1
+  sfx(0)
+ end
+ 
+ gs.cur_x=gs.cur_x%gs.w
+ gs.cur_y=gs.cur_y%gs.h
+ 
+ if btnp(❎) then
+  if not gs.mines_init then
+   init_mines(gs.mine_cnt,gs.cur_x,gs.cur_y)
+  end
+  
+  local num=reveal_tile(gs.cur_x, gs.cur_y)
+  
+  if num==1 then
+   sfx(2)
+  elseif num>=1 and num<=50 then
+   sfx(3)
+  elseif num>50 then
+   sfx(4)
+  end
+ end
+ 
+ if btnp(🅾️) then
+  flag_tile(gs.cur_x, gs.cur_y)
+  sfx(1)
+ end
+end
+
+function handle_menu_inputs()
+ if btnp(⬅️) then
+  gs.cur_diff-=1
+  gs.cur_diff=(gs.cur_diff-1)%#difficulties
+  gs.cur_diff+=1
+ end
+ 
+ if btnp(➡️) then
+  gs.cur_diff+=1
+  gs.cur_diff=(gs.cur_diff-1)%#difficulties
+  gs.cur_diff+=1 
+ end
+ 
+ if btnp(❎) then
+  init_game()
+ end
+end
+
+function update_timers()
+ if efx.shake_t>0 then
+  efx.shake_t-=1
+ end
+ 
+ if efx.flash_t>0 then
+  efx.flash_t-=1
+ end
+ 
+ if efx.strobe_t>0 then
+  efx.strobe_t-=1
+ end
+ 
+ if gs.cur_timer<0 then
+  gs.cur_timer=gs.cur_max_timer
+ else
+  gs.cur_timer-=1
+ end
+end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000033333330000000005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -487,3 +701,56 @@ __gfx__
 00700700033333330000060005555555025555520000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000033333330000060005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000033333330000000005555555022222220000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000888888888888000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000007878788888888888888800000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000005878787888888888888888888500000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000558787878888888888888888888855500000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000056587878788888888888888888888885555000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000006565678787878888888888888888888885555550000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000065656587878788888888888888888888885555555000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000656565528888888888888888888888888825555555500000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000565656522888888888888888888888888225555555500000000000
+00000000000000000000000000000000000000000000000000000000000000000000000005656565522228888888888888888888822225555555550000000000
+00000000000000000000000000000000000000000000000000000000000000000000000006565655552222222888888888888222222255555555550000000000
+00000000000000000000000000000000000000000000000000000000000000000000000005656555555222222222222222222222222555555555550000000000
+00000000000000000000000000000000000000000000000000000000000000000000000006565555555552222222222222222222255555555555550000000000
+00000000000000000000000000000000000000000000000000000000000000000000000005555555555555555222222222222555555555555555550000000000
+00000000000000000000000000000000000000000000000000000000000000000000000001155555555555555555555555555555555555555555110000000000
+00000000000000000000000000000000000000000000000000000000000000000000000001115555555555555555555555555555555555555551110000000000
+00000000000000000000000000000000000000000000000000000000000000000000000001111155555555555555555555555555555555555111110000000000
+00000000000000000000000000000000000000000000000000000000000000000000000001111111555555555555555555555555555555511010100000000000
+00000000000000000000000000000000000000000000000000000000000000000000000001111111115555555555555555555555555511110101010000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000111111111111155555555555555551111111101010100000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000011111111111111111111111111111111111010101000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000011111111111111111111111111111111010101010000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000001111111111111111111111111111110101010100000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000011111111111111111111111110101010101000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000111111111111111111111101010101010000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000011111111111111111111010101010000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000111111111111111110101010000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000001111111111101000000000000000000000000000
+__sfx__
+000100001355000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500
+000100001b65017650016500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0003000006550095500b5500f550085500b5500e55015550005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500005000050000500
+0003000006550095500b5500f550085500b5500e55015550085500a5500e550125501b55023550285500050000500005000050000500005000050000500005000050000500005000050000500005000050000500
+0003000006550095500b5500f550085500b5500e55015550085500a5500e550125501b5502355028550005000c55010550155501d55022550275502c55032550385503a550005000050000500005000050000500
+000400003d670296703c67028660376501e6302c620186101f610126200a630056200562006620026300263003620056200562003620036100361003620026100162001630036100162000610006100061001610
+000200000327003270032700327003270032700327003270032600326003260032600326003250032500225002240022400224002240022300223002230022300123001230012300123001230012300122001220
+000200000505005050070500c050110501805020050280500b0500a0500a0500c0500f05015050210502a050310500c0500d0500f050140503b0503d0500a0500d050360501105017050320501d050220502e050
