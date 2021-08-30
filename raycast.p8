@@ -115,11 +115,11 @@ function handle_inputs()
  end
  
  if btnp(❎) then
-  --if gs.mode=="2d" then
-  -- gs.mode="3d"
-  --elseif gs.mode=="3d" then
-  -- gs.mode="2d"
-  --end
+  if gs.mode=="2d" then
+   gs.mode="3d"
+  elseif gs.mode=="3d" then
+   gs.mode="2d"
+  end
  end
  
  if btnp(🅾️) then
