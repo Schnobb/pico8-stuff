@@ -23,7 +23,7 @@ function _init()
   undock = 4
  }
  
- modes_count = 2
+ modes_count = 3
  modes = {
   storage = 0,
   billboard = 1,
@@ -158,6 +158,10 @@ end
 function _draw_normal()
  for producer in all(producers) do
   circfill(producer.x, producer.y, 2, producer.col)
+ end
+
+ for transporter in all(transporters) do
+  pset(transporter.x, transporter.y, transporter.col)
  end
 end
 
@@ -506,7 +510,7 @@ end
 function init_transporters()
  transporters = {}
  
- add(transporters, transporter())
+ add(transporters, transporter(0, 64, 64, 7))
 end
 
 function init_storage(producer)
