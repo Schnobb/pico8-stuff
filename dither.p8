@@ -2,21 +2,22 @@ pico-8 cartridge // http://www.pico-8.com
 version 29
 __lua__
 function _init()
- interp_list={
-  {f=lerp,name="lerp"},
-  {f=smoothstep,name="smoothstep"},
-  {f=smootherstep,name="smootherstep"}
- }
- interp_idx=0
- interp=interp_list[interp_idx+1].f
- 
- color_res=32
- bright_pat=nil
- init_colors(color_res)
+	interp_list={
+		{f=lerp,name="lerp"},
+		{f=smoothstep,name="smoothstep"},
+		{f=smootherstep,name="smootherstep"}
+	}
+
+	interp_idx=0
+	interp=interp_list[interp_idx+1].f
+
+	color_res=32
+	bright_pat=nil
+	init_colors(color_res)
 end
 
 function _update()
- local regen=false
+	local regen=false
 	if btnp(⬅️) then
 	 interp_idx=(interp_idx-1)%#interp_list
 	 regen=true
@@ -39,7 +40,6 @@ function _update()
 	end
 	
 	interp=interp_list[interp_idx+1].f
-	interp(0,1,0.5)
 	
 	if regen then
 	 init_colors(color_res,bright_pat)
@@ -47,13 +47,13 @@ function _update()
 end
 
 function _draw()
- cls()
- local maxy=16
+	cls()
+	local maxy=16
 	local h=128/maxy
 	
 	for y=0,maxy-1 do
 	 for x=0,128 do
-	  rectfill(x,y*h,x+1,y*h+h,hcolor(y,x/128))
+	  rectfill(x,y*h,x+1,y*h+h,hcolor(y%16,x/128))
 	 end
 	end
 	
